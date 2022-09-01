@@ -35,8 +35,8 @@ def convert_to_onnx(unet, post_quant_conv, decoder, text_encoder, height=512, wi
         raise ValueError(f"`height` and `width` have to be divisible by 8 but are {height} and {width}.")
     h, w = height // 8, width // 8
     # unet onnx export
-    check_inputs = [(torch.rand(1, 4, h, w), torch.tensor([980]), torch.rand(1, 77, 768)), 
-                    (torch.rand(2, 4, h, w), torch.tensor([910]), torch.rand(2, 12, 768)), # batch change, text embed with no trunc
+    check_inputs = [(torch.rand(2, 4, h, w), torch.tensor([980], dtype=torch.long), torch.rand(2, 77, 768)), 
+                    (torch.rand(2, 4, h, w), torch.tensor([910], dtype=torch.long), torch.rand(2, 12, 768)), # batch change, text embed with no trunc
                     ]
     traced_model = torch.jit.trace(unet, check_inputs[0], check_inputs=[check_inputs[1]], strict=True)
     torch.onnx.export(traced_model, check_inputs[0], "onnx/unet.onnx", 
@@ -61,4 +61,9 @@ def convert_to_onnx(unet, post_quant_conv, decoder, text_encoder, height=512, wi
     torch.onnx.export(traced_model, check_inputs[0], "onnx/encoder.onnx", input_names=["text_input"], 
         dynamic_axes={"text_input": [0, 1]}, opset_version=16)
     
-convert_to_onnx(pipe.unet, pipe.vae.post_quant_conv, pipe.vae.decoder, text_encoder, 512, 512)
+
+# Change height and width to create ONNX model file for that size
+convert_to_onnx(pipe.unet, pipe.vae.post_quant_conv, pipe.vae.decoder, text_encoder, height=512, width=512)
+
+# For example, create an onnx model with height=512 and width=768
+# convert_to_onnx(pipe.unet, pipe.vae.post_quant_conv, pipe.vae.decoder, text_encoder, height=512, width=768)
