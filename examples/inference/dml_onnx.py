@@ -138,8 +138,7 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
         # if we use LMSDiscreteScheduler, let's make sure latents are mulitplied by sigmas
         if isinstance(self.scheduler, LMSDiscreteScheduler):
-            if onnx: latents = latents * self.scheduler.sigmas[0]
-            else: latents = latents * self.scheduler.sigmas[0]
+            latents = latents * self.scheduler.sigmas[0]
 
         # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
@@ -205,21 +204,18 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
 lms = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear")
 pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", scheduler=lms, use_auth_token=True)
-
 torch.manual_seed(42)
 
 prompt = "a photo of an astronaut riding a horse on mars"
-image = pipe(prompt, num_inference_steps=12, execution_provider="DmlExecutionProvider")["sample"][0]
+image = pipe(prompt, height=512, width=512, num_inference_steps=50, guidance_scale=7.5, eta=0.0, execution_provider="DmlExecutionProvider")["sample"][0]
 image.save("Dml_1.png")
 
-prompt = "dragons breathing fire, 4k, 8k"
-image = pipe(prompt, guidance_scale=4.0, execution_provider="DmlExecutionProvider")["sample"][0]
-image.save("Dml_2.png")
+# Works on AMD Windows platform
+# Image width and height is set to 512x512
+# If you need images of other sizes (size must be divisible by 8), make sure to save the model with that size in save_onnx.py
+# For example, if you need height=512 and width=768, change create_onnx.py with height=512 and width=768 and run the prompt below with height=512 and width=768
+# Default values are height=512, width=512, num_inference_steps=50, guidance_scale=7.5, eta=0.0, execution_provider="DmlExecutionProvider"
 
-prompt = "huggingface logo"
-image = pipe(prompt, height=512, width=512, num_inference_steps=12, execution_provider="DmlExecutionProvider")["sample"][0]
-image.save("Dml_3.png")
-
-prompt = "3D avatar of mark zuckerberg, 4k , 8k"
-image = pipe(prompt,  height=512, width=512, guidance_scale=4.0, num_inference_steps=10, execution_provider="DmlExecutionProvider")["sample"][0]
-image.save("Dml_4.png")
+# prompt = "a photo of an astronaut riding a horse on mars"
+# image = pipe(prompt, height=512, width=768, num_inference_steps=50, guidance_scale=7.5, eta=0.0, execution_provider="DmlExecutionProvider")["sample"][0]
+# image.save("Dml_1.png")
