@@ -7,39 +7,24 @@ Before running the scripts, make sure to install the library's dependencies & th
 
 ```bash
 git clone https://github.com/harishanand95/diffusers.git
-cd diffusers && pip install -e .
+cd diffusers && git checkout dml && pip install -e .
 pip install transformers ftfy scipy
 ```
 
-## Clone ONNX runtime 
+## Download onnxruntime-directml 
+From this link https://aiinfra.visualstudio.com/PublicPackages/_artifacts/feed/ORT-Nightly/PyPI/ort-nightly-directml/overview/1.13.0.dev20220830001
+, download the onnxruntime nightly directml packages. You can know the python version using `python --version` command.
 
+- If you are on Python3.7 download the file that ends with **-cp37-cp37m-win_amd64.whl
+- If you are on Python3.8 download the file that ends with **-cp38-cp38m-win_amd64.whl
+- and likewise
+
+Copy the .whl file to the working directory and install using this command.
 ```bash
-git clone https://github.com/microsoft/onnxruntime.git
-cd onnxruntime 
+pip install ort_nightly_directml-1.13.0.dev20220830001-cp39-cp39-win_amd64.whl
 ```
 
-## Build DML 
-- The build instruction are from this [link](https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html#build)
-
-> 
-    Requirements for building the DirectML execution provider:
-    - Visual Studio 2017 toolchain (You can install VS 2022 too)
-    - The Windows 10 SDK (10.0.18362.0) for Windows 10, version 1903 (or newer)
-
-Open "x64 native Tools Command Prompt for VS 2022" application and run the following in the onnxruntime folder:
-
-```bash
-cd C:\Users\username\Desktop\pkgs\onnxruntime
-build.bat --build_shared_lib --build_wheel --config Release --use_dml --cmake_generator "Visual Studio 17 2022" --parallel --skip_tests
-```
-If the above command fails, make sure to delete the build folder inside onnxruntime before retrying with changes.
-
-## Install directml python package
-After build, the whl files can be found in the following location `onnxruntime/build/Windows/Release/Release/dist/`.
-
-```bash
-pip install onnxruntime/build/Windows/Release/Release/dist/onnxruntime_directml-1.13.0-cp38-cp38-win_amd64.whl
-```
+An error message like this `ERROR: ort_nightly_directml-1.13.0.dev20220830001-cp38-cp38-win_amd64.whl is not a supported wheel on this platform.` means that there is mismatch in python version and the downloaded package supported python version.
 
 ## Create ONNX files
 This step requires huggingface token. ALl onnx files are created in a folder named onnx in `examples/inference`
