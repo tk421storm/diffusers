@@ -1,6 +1,12 @@
 import inspect
 import warnings
 from typing import List, Optional, Union
+from os.path import exists, join, dirname, realpath
+from traceback import format_exc
+from pickle import load
+from random import random
+from os import startfile
+from pathlib import Path
 
 import torch
 import numpy as np
@@ -11,6 +17,8 @@ from diffusers.models import AutoencoderKL, UNet2DConditionModel
 from diffusers.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import DDIMScheduler, LMSDiscreteScheduler, PNDMScheduler
 # from diffusers import StableDiffusionSafetyChecker
+
+from save_onnx import p, doIt
 
 
 class StableDiffusionPipeline(DiffusionPipeline):
@@ -70,10 +78,10 @@ class StableDiffusionPipeline(DiffusionPipeline):
             import onnxruntime as ort
             so = ort.SessionOptions()
             so.enable_mem_pattern=False
-            unet_sess = ort.InferenceSession("onnx/unet.onnx", so, providers=[ep])
-            post_quant_conv_sess = ort.InferenceSession("onnx/post_quant_conv.onnx", so, providers=[ep])
-            decoder_sess = ort.InferenceSession("onnx/decoder.onnx", so, providers=[ep])
-            encoder_sess = ort.InferenceSession("onnx/encoder.onnx", so, providers=[ep])
+            unet_sess = ort.InferenceSession(join(p, "unet.onnx"), so, providers=[ep])
+            post_quant_conv_sess = ort.InferenceSession(join(p, "post_quant_conv.onnx"), so, providers=[ep])
+            decoder_sess = ort.InferenceSession(join(p, "decoder.onnx"), so, providers=[ep])
+            encoder_sess = ort.InferenceSession(join(p, "encoder.onnx"), so, providers=[ep])
 
         if isinstance(prompt, str):
             batch_size = 1
@@ -193,7 +201,7 @@ class StableDiffusionPipeline(DiffusionPipeline):
             image = image.cpu().permute(0, 2, 3, 1).numpy()
 
         # run safety checker
-        safety_cheker_input = self.feature_extractor(self.numpy_to_pil(image), return_tensors="pt").to(self.device)
+        #safety_cheker_input = self.feature_extractor(self.numpy_to_pil(image), return_tensors="pt").to(self.device)
         # image, has_nsfw_concept = self.safety_checker(images=image, clip_input=safety_cheker_input.pixel_values)
 
         if output_type == "pil":
@@ -201,14 +209,102 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
         return {"sample": image,}# "nsfw_content_detected": has_nsfw_concept}
 
+def stable(width, height, seed, steps, prompt, itterations=1):
 
-lms = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear")
-pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", scheduler=lms, use_auth_token=True)
-torch.manual_seed(42)
+	files=[]
 
-prompt = "a photo of an astronaut riding a horse on mars"
-image = pipe(prompt, height=512, width=512, num_inference_steps=50, guidance_scale=7.5, eta=0.0, execution_provider="DmlExecutionProvider")["sample"][0]
-image.save("Dml_1.png")
+	for i in range(itterations):
+		#check if we need to save onnx again
+		onnxUpdate=False
+		
+		if not exists(p):
+			onnxUpdate=True
+		else:
+			#check last width/height
+			try:
+				with open(join(p, "widthHeight.pickle"), "rb") as myFile:
+					lastWidth, lastHeight=load(myFile)
+					
+				if lastWidth!=width or lastHeight!=height:
+					print('updating onnx weights based on new width/height')
+					onnxUpdate=True
+				else:
+					print("local onnx files are correct for "+str(width)+"x"+str(height))
+			except:
+				print(format_exc())
+				onnxUpdate=True
+				
+		if onnxUpdate:
+			print('updating onnx...')
+			doIt(width, height)
+			
+		if itterations!=1:
+			seed=int(random()*10000)
+		
+		print("diffusing with prompt "+prompt+" [seed: "+str(seed)+"]")
+		
+		lms = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear")
+		pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", scheduler=lms, use_auth_token=True)
+		torch.manual_seed(seed)
+
+		image = pipe(prompt, height=height, width=width, num_inference_steps=steps, guidance_scale=7.5, eta=0.0, execution_provider="DmlExecutionProvider")["sample"][0]
+		fileName=Path(join(dirname(realpath(__file__)), prompt.replace(" ", "_")+"."+str(seed)+"."+str(steps)+".png"))
+		image.save(str(fileName).replace("\\", "/"))
+		
+		files.append(fileName)
+		
+	if len(files)==1:
+		return files[0]
+	else:
+		return files
+
+
+if __name__ == "__main__":
+
+	import sys
+	args=sys.argv[1:]
+	
+	if not len(args):
+		print("you must pass a prompt")
+		sys.exit(1)
+		
+	width=args.pop(0)
+	try:
+		width=int(width)
+	except:
+		print('first argument must be int divisible by 8, not '+str(width))
+		sys.exit(1)
+		
+	height=args.pop(0)
+	try:
+		height=int(height)
+	except:
+		print('first argument must be int divisible by 8, not '+str(height))
+		sys.exit(1)
+		
+	if width%8 or height%8:
+		print('width/height must be divisible by 8')
+		sys.exit(1)
+		
+	seed=input("seed (random):")
+	steps=input("steps (50):")
+	
+	if seed=="":
+		seed=int(random()*10000)
+	else:
+		seed=int(seed)
+	
+	if steps=="":
+		steps=50
+	else:
+		steps=int(steps)
+		
+	prompt=" ".join(args)
+		
+	startfile(stable(width, height, seed, steps, prompt))
+
+	
+	
 
 # Works on AMD Windows platform
 # Image width and height is set to 512x512
